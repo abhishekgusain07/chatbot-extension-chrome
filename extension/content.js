@@ -33,12 +33,30 @@ const chatbotHTML = `
       </div>
     </div>
     <div class="chat-input">
-      <input type="text" placeholder="Type your message..." id="message-input">
-      <button id="send-btn">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+    <input type="text" placeholder="Ask me anything..." id="message-input">
+    <button id="send-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+  </div>
+`;
+
+// Constants for message limits
+const FREE_MESSAGE_LIMIT = 5;
+const UPGRADE_URL = 'https://your-upgrade-url.com';
+
+// Create upgrade popup HTML
+const upgradePopupHTML = `
+  <div class="upgrade-popup hidden" id="upgrade-popup">
+    <div class="upgrade-content">
+      <h3>Message Limit Reached</h3>
+      <p>You've reached the free message limit. Upgrade to continue chatting!</p>
+      <div class="upgrade-actions">
+        <button id="upgrade-btn" class="upgrade-btn">Upgrade Now</button>
+        <button id="close-upgrade-btn" class="close-upgrade-btn">Maybe Later</button>
+      </div>
     </div>
   </div>
 `;
@@ -230,50 +248,56 @@ style.textContent = `
   }
 
   .chat-input {
-    padding: 16px;
-    background: white;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    gap: 8px;
-  }
+  padding: 16px;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  max-width: 600px;
+  margin: 0 auto;
+  position: relative;
+}
 
-  #message-input {
-    flex: 1;
-    padding: 10px 16px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    transition: border-color 0.2s ease;
-    outline: none;
-    color: #1e293b;
-    background: white;
-  }
+#message-input {
+  width: 100%;
+  padding: 10px 48px 10px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease;
+  outline: none;
+  color: #1e293b;
+  background: white;
+  box-sizing: border-box;
+}
 
-  #message-input::placeholder {
-    color: #94a3b8;
-  }
+#message-input::placeholder {
+  color: #94a3b8;
+}
 
-  #message-input:focus {
-    border-color: #2563eb;
-  }
+#message-input:focus {
+  border-color: #2563eb;
+}
 
-  #send-btn {
-    background: #2563eb;
-    color: white;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s ease;
-  }
+#send-btn {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #2563eb;
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
 
-  #send-btn:hover {
-    background: #1d4ed8;
-  }
+#send-btn:hover {
+  background: #1d4ed8;
+}
 
   .typing-indicator {
     display: flex;
@@ -312,9 +336,100 @@ style.textContent = `
   }
 `;
 
+style.textContent += `
+  .upgrade-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+    z-index: 10001;
+    max-width: 400px;
+    width: 90%;
+  }
+
+  .upgrade-popup.hidden {
+    display: none;
+  }
+
+  .upgrade-content {
+    text-align: center;
+  }
+
+  .upgrade-content h3 {
+    margin: 0 0 12px;
+    color: #1f2937;
+    font-size: 1.5rem;
+  }
+
+  .upgrade-content p {
+    margin: 0 0 20px;
+    color: #4b5563;
+  }
+
+  .upgrade-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .upgrade-btn {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .upgrade-btn:hover {
+    background: #1d4ed8;
+  }
+
+  .close-upgrade-btn {
+    background: #e5e7eb;
+    color: #4b5563;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .close-upgrade-btn:hover {
+    background: #d1d5db;
+  }
+`;
+
 // Create container and inject HTML
 const container = document.createElement('div');
 container.innerHTML = chatbotHTML;
+
+// Create and inject upgrade popup
+const upgradePopupDiv = document.createElement('div');
+upgradePopupDiv.innerHTML = upgradePopupHTML;
+document.body.appendChild(upgradePopupDiv);
+
+// Get upgrade popup elements
+const upgradePopup = document.getElementById('upgrade-popup');
+const upgradeBtn = document.getElementById('upgrade-btn');
+const closeUpgradeBtn = document.getElementById('close-upgrade-btn');
+
+// Add event listeners for upgrade popup
+upgradeBtn.addEventListener('click', () => {
+  window.open(UPGRADE_URL, '_blank');
+  upgradePopup.classList.add('hidden');
+});
+
+closeUpgradeBtn.addEventListener('click', () => {
+  upgradePopup.classList.add('hidden');
+});
 
 // Inject styles and container
 document.head.appendChild(style);
@@ -476,24 +591,44 @@ async function sendMessageToAI(message) {
   }
 }
 
+// Function to check message limit
+async function checkMessageLimit() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['messageCount'], (result) => {
+      const count = result.messageCount || 0;
+      resolve(count < FREE_MESSAGE_LIMIT);
+    });
+  });
+}
+
+// Function to increment message count
+function incrementMessageCount() {
+  chrome.storage.sync.get(['messageCount'], (result) => {
+    const count = (result.messageCount || 0) + 1;
+    chrome.storage.sync.set({ messageCount: count });
+  });
+}
+
 sendButton.addEventListener('click', async () => {
   const message = messageInput.value.trim();
   if (message) {
-    // Show user message
-    addMessage(message, true);
-    messageInput.value = '';
+    const canSendMessage = await checkMessageLimit();
+    
+    if (!canSendMessage) {
+      upgradePopup.classList.remove('hidden');
+      return;
+    }
 
-    // Show typing indicator
-    const typingIndicator = addTypingIndicator();
+    // Show user message
+    messageInput.value = '';
+    addMessage(message, true);
+    incrementMessageCount();
 
     try {
-      console.log('📝 Sending message to AI:', message);
       await sendMessageToAI(message);
-    } finally {
-      // Remove typing indicator if it still exists
-      if (typingIndicator && typingIndicator.parentNode) {
-        typingIndicator.parentNode.removeChild(typingIndicator);
-      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      addMessage('Sorry, there was an error processing your message. Please try again.', false);
     }
   }
 });
