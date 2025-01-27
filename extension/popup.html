@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat Assistant Settings</title>
+  <style>
+    body {
+      width: 320px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .header {
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      margin: 0 0 8px 0;
+      color: #fff;
+    }
+
+    .description {
+      color: #a1a1aa;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .section {
+      background: #27272a;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #3f3f46;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      color: #fff;
+    }
+
+    .position-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      padding: 8px;
+    }
+
+    .position-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      background: #3f3f46;
+      cursor: pointer;
+      position: relative;
+      padding: 0;
+      margin: 0 auto;
+      transition: all 0.2s ease;
+    }
+
+    .position-btn::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      background: transparent;
+      transition: all 0.2s ease;
+    }
+
+    .position-btn:hover::before {
+      background: rgba(147, 51, 234, 0.1);
+    }
+
+    .position-btn.active {
+      background: #9333ea;
+      box-shadow: 0 0 12px rgba(147, 51, 234, 0.5);
+    }
+
+    .position-btn.active::before {
+      background: rgba(147, 51, 234, 0.15);
+    }
+
+    .scrape-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .action-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #3f3f46;
+      border: 1px solid #52525b;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #fff;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .action-btn:hover {
+      background: #52525b;
+      border-color: #71717a;
+    }
+
+    .action-btn:active {
+      background: #71717a;
+    }
+
+    .action-btn svg {
+      flex-shrink: 0;
+      stroke: currentColor;
+    }
+
+    .action-btn.loading {
+      background: #52525b;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .status {
+      font-size: 0.875rem;
+      color: #9333ea;
+      margin-top: 8px;
+      text-align: center;
+      min-height: 1.2em;
+    }
+
+    .url-patterns {
+      margin-top: 12px;
+    }
+
+    .pattern-input {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .pattern-input input {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      width: 100%;
+      font-size: 14px;
+    }
+
+    .pattern-input input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    .pattern-input button {
+      padding: 8px 16px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .pattern-input button:hover {
+      background: #3b82f6;
+    }
+
+    .pattern-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 8px 0;
+    }
+
+    .pattern-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .pattern-list::-webkit-scrollbar-track {
+      background: #1a1a1a;
+      border-radius: 4px;
+    }
+
+    .pattern-list::-webkit-scrollbar-thumb {
+      background: #4a4a4a;
+      border-radius: 4px;
+    }
+
+    .pattern-list::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    .pattern-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #262626;
+      border-radius: 6px;
+      border: 1px solid #333;
+      gap: 8px;
+      word-break: break-all;
+    }
+
+    .pattern-item span {
+      color: #fff;
+      font-size: 14px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pattern-item button {
+      background: none;
+      border: none;
+      color: #ef4444;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .pattern-item button:hover {
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .scrape-patterns-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 10px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .scrape-patterns-btn:hover {
+      background: #3b82f6;
+    }
+
+    .scrape-patterns-btn:disabled {
+      background: #333;
+      cursor: not-allowed;
+    }
+
+    .scrape-patterns-btn svg {
+      transition: transform 0.2s;
+    }
+
+    .scrape-patterns-btn:hover svg {
+      transform: translateY(2px);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Chat Assistant</h1>
+      <p class="description">
+        Your AI-powered chat assistant that understands the content of any website you visit.
+        Simply click the chat bubble to start asking questions about the current page.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Chat position</h2>
+      <div class="position-controls">
+        <button class="position-btn" data-position="top-left" title="Top Left"></button>
+        <button class="position-btn" data-position="top-center" title="Top Center"></button>
+        <button class="position-btn" data-position="top-right" title="Top Right"></button>
+        <button class="position-btn" data-position="middle-left" title="Middle Left"></button>
+        <button class="position-btn" data-position="middle-center" title="Middle Center"></button>
+        <button class="position-btn" data-position="middle-right" title="Middle Right"></button>
+        <button class="position-btn active" data-position="bottom-left" title="Bottom Left"></button>
+        <button class="position-btn" data-position="bottom-center" title="Bottom Center"></button>
+        <button class="position-btn" data-position="bottom-right" title="Bottom Right"></button>
+      </div>
+      <div class="status" id="position-status"></div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Scraping Options</h2>
+      <div class="scrape-controls">
+        <button id="scrape-page" class="action-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 12L11 14L15 10M12 3L4 7V17L12 21L20 17V7L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Scrape Current Page
+        </button>
+        <button id="scrape-site" class="action-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3L4 7V17L12 21L20 17V7L12 3Z M12 12L20 8M12 12L4 8M12 12V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Scrape Entire Site
+        </button>
+      </div>
+      <div class="status" id="scrape-status"></div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">URL Patterns</h2>
+      <div class="url-patterns">
+        <div class="pattern-input">
+          <input type="text" id="pattern-input" placeholder="Enter URL pattern (e.g., */docs/*)">
+          <button id="add-pattern">Add</button>
+        </div>
+        <div id="pattern-list" class="pattern-list">
+          <!-- Patterns will be added here dynamically -->
+        </div>
+        <button id="scrape-patterns" class="scrape-patterns-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 9L12 16L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Scrape Selected URLs
+        </button>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
