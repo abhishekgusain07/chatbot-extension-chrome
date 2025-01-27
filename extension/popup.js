@@ -1,4 +1,263 @@
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize variables
+const CLERK_DOMAIN = 'proud-porpoise-50.clerk.accounts.dev';
+const CLIENT_ID = 'Gz43F2t7JlnvKFZL';
+const CLIENT_SECRET = 'UmJ0MfWB7NTHKtig8A9ggwyx6yXd8OiZ'
+const TOKEN_ENDPOINT = 'https://proud-porpoise-50.clerk.accounts.dev/oauth/token';
+
+// Log the callback URL for configuration
+console.log('Extension callback URL:', chrome.identity.getRedirectURL());
+
+let isAuthenticated = false;
+let currentUser = null;
+
+// DOM Elements
+const authContainer = document.getElementById('auth-container');
+const appContainer = document.getElementById('app-container');
+const signOutBtn = document.getElementById('sign-out-btn');
+
+// Authentication state management
+// Function to update UI based on auth state
+function updateUIForAuthState() {
+  if (isAuthenticated && currentUser) {
+    authContainer.classList.add('hidden');
+    appContainer.classList.add('visible');
+    // Store user token in extension storage
+    chrome.storage.local.set({
+      authToken: currentUser.session.token,
+      userId: currentUser.id
+    });
+    // Notify content script about authentication
+    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        action: 'AUTH_STATE_CHANGED',
+        isAuthenticated: true,
+        userId: currentUser.id
+      });
+    });
+  } else {
+    authContainer.classList.remove('hidden');
+    appContainer.classList.remove('visible');
+    // Clear auth data from storage
+    chrome.storage.local.remove(['authToken', 'userId']);
+    // Notify content script about authentication
+    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        action: 'AUTH_STATE_CHANGED',
+        isAuthenticated: false
+      });
+    });
+  }
+}
+
+// Handle authentication
+async function initializeAuth() {
+  const token = await chrome.storage.local.get('authToken');
+  if (token.authToken) {
+    isAuthenticated = true;
+    await validateAndSetUser(token.authToken);
+    showAppContainer();
+  } else {
+    showAuthContainer();
+  }
+}
+
+// Validate token and get user info
+async function validateAndSetUser(token) {
+  try {
+    const response = await fetch('https://proud-porpoise-50.clerk.accounts.dev/oauth/userinfo', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.ok) {
+      currentUser = await response.json();
+      isAuthenticated = true;
+      console.log('User info:', currentUser);
+      
+      // Notify content script about successful authentication
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'AUTH_STATUS_CHANGED',
+            isAuthenticated: true,
+            token: token
+          });
+        }
+      });
+    } else {
+      console.error('Token validation failed:', await response.text());
+      throw new Error('Invalid token');
+    }
+  } catch (error) {
+    console.error('Token validation failed:', error);
+    await signOut();
+  }
+}
+
+// Sign in with Clerk using Chrome Identity API
+async function signInWithClerk() {
+  try {
+    const redirectURL = chrome.identity.getRedirectURL();
+    console.log('Redirect URL:', redirectURL);
+    
+    // Generate a longer state parameter (32 characters)
+    const state = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    console.log('State:', state);
+    
+    // Example with your instance domain
+    const authURLWithInstance = new URL('https://proud-porpoise-50.clerk.accounts.dev/oauth/authorize');
+    authURLWithInstance.searchParams.set('response_type', 'code');
+    authURLWithInstance.searchParams.set('client_id', CLIENT_ID);
+    authURLWithInstance.searchParams.set('redirect_uri', redirectURL);
+    authURLWithInstance.searchParams.set('scope', 'profile email');
+    authURLWithInstance.searchParams.set('state', state);
+    
+    console.log('Auth URL:', authURLWithInstance.toString());
+    
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authURLWithInstance.toString(),
+      interactive: true
+    });
+    
+    console.log('Full response URL:', responseUrl);
+    
+    if (responseUrl) {
+      const url = new URL(responseUrl);
+      console.log('Response URL parts:', {
+        protocol: url.protocol,
+        host: url.host,
+        pathname: url.pathname,
+        search: url.search,
+        hash: url.hash
+      });
+      
+      // Try both hash and search parameters
+      const hash = url.hash.substring(1);
+      const search = url.search.substring(1);
+      console.log('Hash params:', hash);
+      console.log('Search params:', search);
+      
+      // Try parsing both hash and search
+      const hashParams = new URLSearchParams(hash);
+      const searchParams = new URLSearchParams(search);
+      
+      console.log('Parsed hash params:', Object.fromEntries(hashParams.entries()));
+      console.log('Parsed search params:', Object.fromEntries(searchParams.entries()));
+      
+      // Check for authorization code
+      const code = hashParams.get('code') || searchParams.get('code');
+      console.log('Found code:', code ? 'Yes' : 'No');
+      
+      if (code) {
+        // Exchange code for token
+        const tokenParams = {
+          grant_type: 'authorization_code',
+          client_id: CLIENT_ID,
+          client_secret: CLIENT_SECRET,
+          code: code,
+          redirect_uri: redirectURL
+        };
+        
+        console.log('Token request to:', TOKEN_ENDPOINT);
+        console.log('Token parameters:', tokenParams);
+        
+        const tokenResponse = await fetch(TOKEN_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+          },
+          body: new URLSearchParams(tokenParams)
+        });
+
+        console.log('Token response status:', tokenResponse.status);
+        const responseText = await tokenResponse.text();
+        console.log('Token response body:', responseText);
+
+        if (!tokenResponse.ok) {
+          throw new Error(`Token exchange failed: ${tokenResponse.status} - ${responseText}`);
+        }
+
+        let tokenData;
+        try {
+          tokenData = JSON.parse(responseText);
+        } catch (e) {
+          throw new Error(`Failed to parse token response: ${e.message}`);
+        }
+        
+        const token = tokenData.access_token;
+        
+        if (token) {
+          await chrome.storage.local.set({ 
+            authToken: token,
+            tokenExpiry: Date.now() + (60 * 60 * 1000) // 1 hour expiry
+          });
+          
+          await validateAndSetUser(token);
+          showAppContainer();
+          initializeApp();
+        } else {
+          throw new Error('No token received from token exchange');
+        }
+      } else {
+        // Check for error information
+        const error = hashParams.get('error') || searchParams.get('error');
+        const errorDescription = hashParams.get('error_description') || searchParams.get('error_description');
+        
+        if (error || errorDescription) {
+          throw new Error(`OAuth error: ${error} - ${errorDescription}`);
+        } else {
+          throw new Error('No authorization code received in response');
+        }
+      }
+    } else {
+      throw new Error('No response URL received from auth flow');
+    }
+  } catch (error) {
+    console.error('Authentication failed. Full error:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    document.getElementById('auth-error').textContent = `Authentication failed: ${error.message}`;
+  }
+}
+
+// Sign out
+async function signOut() {
+  try {
+    await chrome.storage.local.remove(['authToken', 'tokenExpiry']);
+    isAuthenticated = false;
+    currentUser = null;
+    showAuthContainer();
+  } catch (error) {
+    console.error('Sign out failed:', error);
+  }
+}
+
+// Check if token is expired
+async function isTokenExpired() {
+  const data = await chrome.storage.local.get(['tokenExpiry']);
+  return !data.tokenExpiry || Date.now() > data.tokenExpiry;
+}
+
+// UI Helpers
+function showAuthContainer() {
+  document.getElementById('auth-container').style.display = 'block';
+  document.getElementById('app-container').style.display = 'none';
+}
+
+function showAppContainer() {
+  document.getElementById('auth-container').style.display = 'none';
+  document.getElementById('app-container').style.display = 'block';
+}
+
+// Function to initialize app features
+function initializeApp() {
+  if (!isAuthenticated) return;
+  
   const positionButtons = document.querySelectorAll('.position-btn');
   const scrapePageBtn = document.getElementById('scrape-page');
   const scrapeSiteBtn = document.getElementById('scrape-site');
@@ -236,4 +495,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load patterns when popup opens
   loadPatterns();
+}
+
+// Initialize app after successful authentication
+function initializeApp() {
+  // Hide login container
+  document.getElementById('login-container').classList.add('hidden');
+  
+  // Show app container
+  document.getElementById('app-container').classList.remove('hidden');
+  
+  // Get the current auth token
+  chrome.storage.local.get(['authToken'], function(result) {
+    if (result.authToken) {
+      // Notify content script about authentication
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'AUTH_STATUS_CHANGED',
+            isAuthenticated: true,
+            token: result.authToken
+          });
+        }
+      });
+    }
+  });
+}
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', async () => {
+  // Check token expiry
+  chrome.storage.local.get(['authToken', 'tokenExpiry'], function(result) {
+    const currentTime = Date.now();
+    const tokenExpiry = result.tokenExpiry;
+    
+    if (result.authToken && tokenExpiry && currentTime < tokenExpiry) {
+      initializeApp();
+    } else {
+      // Clear expired token
+      chrome.storage.local.remove(['authToken', 'tokenExpiry']);
+      
+      // Show login container
+      document.getElementById('login-container').classList.remove('hidden');
+      document.getElementById('app-container').classList.add('hidden');
+    }
+  });
+  
+  // Check token expiry
+  if (await isTokenExpired()) {
+    await signOut();
+  } else {
+    await initializeAuth();
+  }
+  
+  document.getElementById('signin-btn').addEventListener('click', signInWithClerk);
+  const signOutBtn = document.getElementById('signout-btn');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', signOut);
+  }
+  
+  // Initialize app features if authenticated
+  if (isAuthenticated) {
+    initializeApp();
+  }
 });

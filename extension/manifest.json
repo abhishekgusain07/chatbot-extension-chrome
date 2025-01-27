@@ -4,9 +4,10 @@
   "description": "An AI-powered chat assistant that helps you understand and interact with website content",
   "version": "1.0",
   "permissions": [
-    "activeTab",
     "storage",
-    "scripting"
+    "activeTab",
+    "scripting",
+    "identity"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -24,15 +25,12 @@
     "48": "icons/icon48.png"
   },
   "host_permissions": [
-    "https://*/*",
-    "http://*/*",
-    "http://localhost:3000/*",
-    "https://your-api-domain.com/*"
+    "https://proud-porpoise-50.clerk.accounts.dev/*"
   ],
-  "web_accessible_resources": [{
-    "resources": ["chatbot-app/out/*"],
-    "matches": ["<all_urls>"]
-  }],
+  "oauth2": {
+    "client_id": "Gz43F2t7JlnvKFZL",
+    "scopes": ["profile", "email"]
+  },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }

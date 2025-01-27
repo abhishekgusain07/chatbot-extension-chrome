@@ -1,4 +1,183 @@
-// Create the HTML content
+// Authentication state
+let isAuthenticated = false;
+let authToken = null;
+
+// Check initial auth status
+chrome.storage.local.get(['authToken', 'tokenExpiry'], function(result) {
+  if (result.authToken && result.tokenExpiry && Date.now() < result.tokenExpiry) {
+    isAuthenticated = true;
+    authToken = result.authToken;
+    initializeChatUI();
+  }
+});
+
+// Listen for auth status changes
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Received message:', message);
+  
+  if (message.type === 'AUTH_STATUS_CHANGED') {
+    isAuthenticated = message.isAuthenticated;
+    authToken = message.token;
+    
+    if (isAuthenticated && authToken) {
+      console.log('Authentication successful, initializing chat UI');
+      initializeChatUI();
+    } else {
+      console.log('User not authenticated or missing token');
+      removeChatUI();
+    }
+  }
+  
+  // Handle position updates
+  if (message.action === 'updatePosition' && isAuthenticated) {
+    updateBubblePosition(message.position);
+  }
+});
+
+// Initialize chat UI
+function initializeChatUI() {
+  if (!isAuthenticated) {
+    console.log('Not authenticated, skipping UI initialization');
+    return;
+  }
+
+  console.log('Initializing chat UI');
+  
+  // Check if UI already exists
+  if (document.getElementById('chat-bubble')) {
+    console.log('Chat UI already exists');
+    return;
+  }
+
+  // Create chat UI container
+  const container = document.createElement('div');
+  container.innerHTML = chatbotHTML;
+  document.body.appendChild(container.firstElementChild);
+
+  // Initialize event listeners
+  initializeEventListeners();
+  console.log('Chat UI initialized');
+}
+
+// Remove chat UI
+function removeChatUI() {
+  const chatBubble = document.getElementById('chat-bubble');
+  const chatContainer = document.getElementById('chat-container');
+  
+  if (chatBubble) {
+    chatBubble.remove();
+  }
+  if (chatContainer) {
+    chatContainer.remove();
+  }
+}
+
+// Initialize event listeners
+function initializeEventListeners() {
+  const chatBubble = document.getElementById('chat-bubble');
+  const chatContainer = document.getElementById('chat-container');
+  const closeBtn = document.getElementById('close-btn');
+  const messageInput = document.getElementById('message-input');
+  const sendBtn = document.getElementById('send-btn');
+  const scrapeBtn = document.getElementById('scrape-btn');
+
+  if (chatBubble) {
+    chatBubble.addEventListener('click', () => {
+      chatContainer.classList.remove('hidden');
+      chatBubble.classList.add('hidden');
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      chatContainer.classList.add('hidden');
+      chatBubble.classList.remove('hidden');
+    });
+  }
+
+  if (messageInput && sendBtn) {
+    const handleSendMessage = async () => {
+      const message = messageInput.value.trim();
+      if (message) {
+        try {
+          const canSendMessage = await checkMessageLimit();
+          
+          if (!canSendMessage) {
+            upgradePopup.classList.remove('hidden');
+            return;
+          }
+
+          // Show user message
+          messageInput.value = '';
+          addMessage(message, true);
+          
+          // Send message to AI and increment count only if successful
+          await sendMessageToAI(message);
+          await incrementMessageCount();
+        } catch (error) {
+          console.error('Error:', error);
+          addMessage('Sorry, there was an error processing your message. Please try again.', false);
+        }
+      }
+    };
+
+    sendBtn.addEventListener('click', handleSendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        handleSendMessage();
+      }
+    });
+  }
+
+  if (scrapeBtn) {
+    scrapeBtn.addEventListener('click', async () => {
+      const button = scrapeBtn;
+      button.textContent = 'Scraping...';
+      button.disabled = true;
+
+      try {
+        await handleScraping(true);
+        button.textContent = 'Scrape Site';
+        button.disabled = false;
+        addMessage(`Scraped site successfully! The content is now available for our conversation.`, false);
+      } catch (error) {
+        console.error('Failed to scrape site:', error);
+        button.textContent = 'Scrape Site';
+        button.disabled = false;
+        addMessage('Sorry, there was an error scraping the site.', false);
+      }
+    });
+  }
+}
+
+// API call wrapper with auth token
+async function callAPI(endpoint, options = {}) {
+  if (!authToken) {
+    throw new Error('No auth token available');
+  }
+
+  const defaultOptions = {
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json'
+    }
+  };
+
+  const finalOptions = { ...defaultOptions, ...options };
+  
+  try {
+    const response = await fetch(endpoint, finalOptions);
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('API call error:', error);
+    throw error;
+  }
+}
+
+// HTML template for the chat UI
 const chatbotHTML = `
   <div class="chat-bubble" id="chat-bubble">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -33,13 +212,13 @@ const chatbotHTML = `
       </div>
     </div>
     <div class="chat-input">
-    <input type="text" placeholder="Ask me anything..." id="message-input">
-    <button id="send-btn">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
-  </div>
+      <input type="text" placeholder="Ask me anything..." id="message-input">
+      <button id="send-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
   </div>
 `;
 
@@ -61,7 +240,7 @@ const upgradePopupHTML = `
   </div>
 `;
 
-// Create and inject styles
+// Create styles
 const style = document.createElement('style');
 style.textContent = `
   .chat-bubble {
@@ -248,56 +427,56 @@ style.textContent = `
   }
 
   .chat-input {
-  padding: 16px;
-  background: white;
-  border-top: 1px solid #e2e8f0;
-  max-width: 600px;
-  margin: 0 auto;
-  position: relative;
-}
+    padding: 16px;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    max-width: 600px;
+    margin: 0 auto;
+    position: relative;
+  }
 
-#message-input {
-  width: 100%;
-  padding: 10px 48px 10px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  transition: border-color 0.2s ease;
-  outline: none;
-  color: #1e293b;
-  background: white;
-  box-sizing: border-box;
-}
+  #message-input {
+    width: 100%;
+    padding: 10px 48px 10px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+    outline: none;
+    color: #1e293b;
+    background: white;
+    box-sizing: border-box;
+  }
 
-#message-input::placeholder {
-  color: #94a3b8;
-}
+  #message-input::placeholder {
+    color: #94a3b8;
+  }
 
-#message-input:focus {
-  border-color: #2563eb;
-}
+  #message-input:focus {
+    border-color: #2563eb;
+  }
 
-#send-btn {
-  position: absolute;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: #2563eb;
-  color: white;
-  border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease;
-}
+  #send-btn {
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #2563eb;
+    color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+  }
 
-#send-btn:hover {
-  background: #1d4ed8;
-}
+  #send-btn:hover {
+    background: #1d4ed8;
+  }
 
   .typing-indicator {
     display: flex;
@@ -410,13 +589,23 @@ style.textContent += `
 // Create container and inject HTML
 const container = document.createElement('div');
 container.innerHTML = chatbotHTML;
-
+  
 // Create and inject upgrade popup
 const upgradePopupDiv = document.createElement('div');
 upgradePopupDiv.innerHTML = upgradePopupHTML;
+  
+// Inject styles and elements
+document.head.appendChild(style);
+document.body.appendChild(container);
 document.body.appendChild(upgradePopupDiv);
 
-// Get upgrade popup elements
+// Get DOM elements
+const chatBubble = document.getElementById('chat-bubble');
+const chatContainer = document.getElementById('chat-container');
+const messageInput = document.getElementById('message-input');
+const sendButton = document.getElementById('send-btn');
+const closeButton = document.getElementById('close-btn');
+const scrapeButton = document.getElementById('scrape-btn');
 const upgradePopup = document.getElementById('upgrade-popup');
 const upgradeBtn = document.getElementById('upgrade-btn');
 const closeUpgradeBtn = document.getElementById('close-upgrade-btn');
@@ -431,27 +620,16 @@ closeUpgradeBtn.addEventListener('click', () => {
   upgradePopup.classList.add('hidden');
 });
 
-// Inject styles and container
-document.head.appendChild(style);
-document.body.appendChild(container);
-
-// Add event listeners
-const chatBubble = container.querySelector('#chat-bubble');
-const chatContainer = container.querySelector('#chat-container');
-const closeBtn = container.querySelector('#close-btn');
-const messageInput = container.querySelector('#message-input');
-const sendButton = container.querySelector('#send-btn');
-const messagesContainer = container.querySelector('.chat-messages');
-const scrapeButton = container.querySelector('#scrape-btn');
-
+// Function to add message to chat
 function addMessage(text, isUser = false) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
   messageDiv.textContent = text;
-  messagesContainer.appendChild(messageDiv);
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  document.getElementById('chat-messages').appendChild(messageDiv);
+  document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
 }
 
+// Function to add typing indicator
 function addTypingIndicator() {
   const typingDiv = document.createElement('div');
   typingDiv.className = 'typing-indicator';
@@ -460,438 +638,69 @@ function addTypingIndicator() {
     <div class="typing-dot"></div>
     <div class="typing-dot"></div>
   `;
-  messagesContainer.appendChild(typingDiv);
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  document.getElementById('chat-messages').appendChild(typingDiv);
+  document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
   return typingDiv;
 }
 
-// Load chat history when chat is opened
-async function loadChatHistory() {
-  try {
-    const domain = getCurrentDomain();
-    const response = await callAPI(`chat-history/${domain}`, null, 'GET');
-    const data = await response.json();
-
-    if (data.success && data.messages) {
-      // Clear existing messages
-      messagesContainer.innerHTML = '';
-
-      // Add each message from history
-      data.messages.forEach(msg => {
-        addMessage(msg.content, msg.role === 'user');
-      });
-
-      // Scroll to bottom
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-  } catch (error) {
-    console.error('Error loading chat history:', error);
-  }
-}
-
-// Call API with retry logic
-async function callAPI(endpoint, data, method) {
-  const maxRetries = 3;
-  const baseDelay = 1000; // 1 second
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`🌐 API Call (Attempt ${attempt}/${maxRetries}):`, {
-        endpoint,
-        method,
-        dataSize: data ? JSON.stringify(data).length : 0
-      });
-
-      const response = await fetch(`http://localhost:8080/${endpoint}`, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: data ? JSON.stringify(data) : undefined,
-      });
-
-      console.log(`📥 Response status: ${response.status}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Server error response:', errorText);
-        throw new Error(`API request failed: ${response.status}\n${errorText}`);
-      }
-
-      return response;
-    } catch (error) {
-      console.error(`❌ API Error (Attempt ${attempt}/${maxRetries}):`, error);
-
-      if (attempt === maxRetries) {
-        throw error;
-      }
-
-      const delay = baseDelay * Math.pow(2, attempt - 1);
-      console.log(`⏳ Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-}
-
-// Handle chat functionality
-async function sendMessageToAI(message) {
-  try {
-    const domain = getCurrentDomain();
-    console.log('📝 YURURRR:', message);
-
-    const response = await callAPI('', {
-      messages: [
-        { role: 'user', content: message }
-      ],
-      domain,
-    },
-    'POST'
-  );
-
-    if (!response.ok) {
-      throw new Error('Failed to get response from AI');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let aiResponse = '';
-
-    // Add typing indicator first
-    const typingIndicator = addTypingIndicator();
-    let messageDiv = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) {
-        break;
-      }
-
-      const chunk = decoder.decode(value);
-      aiResponse += chunk;
-
-      // Create or update the message div
-      if (!messageDiv) {
-        // Remove typing indicator before adding the message
-        typingIndicator.remove();
-        // Create new message div
-        messageDiv = document.createElement('div');
-        messageDiv.className = 'message bot-message';
-        messagesContainer.appendChild(messageDiv);
-      }
-
-      // Update the message content
-      messageDiv.textContent = aiResponse;
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-  } catch (error) {
-    console.error('Error sending message to AI:', error);
-    addMessage('Sorry, there was an error processing your message. Please try again.', false);
-  }
-}
-
-// Function to check message limit
+// Function to check message limit from server
 async function checkMessageLimit() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['messageCount'], (result) => {
-      const count = result.messageCount || 0;
-      resolve(count < FREE_MESSAGE_LIMIT);
-    });
-  });
+  try {
+    const response = await callAPI('/api/check-limit', {}, 'GET');
+    return response.canSendMessage;
+  } catch (error) {
+    console.error('Error checking message limit:', error);
+    return false; // Fail closed - if we can't check the limit, don't allow messages
+  }
 }
 
-// Function to increment message count
-function incrementMessageCount() {
-  chrome.storage.sync.get(['messageCount'], (result) => {
-    const count = (result.messageCount || 0) + 1;
-    chrome.storage.sync.set({ messageCount: count });
-  });
+// Function to increment message count on server
+async function incrementMessageCount() {
+  try {
+    await callAPI('/api/increment-count', {}, 'POST');
+  } catch (error) {
+    console.error('Error incrementing message count:', error);
+  }
 }
 
+// Event Listeners
 sendButton.addEventListener('click', async () => {
   const message = messageInput.value.trim();
   if (message) {
-    const canSendMessage = await checkMessageLimit();
-    
-    if (!canSendMessage) {
-      upgradePopup.classList.remove('hidden');
-      return;
-    }
-
-    // Show user message
-    messageInput.value = '';
-    addMessage(message, true);
-    incrementMessageCount();
-
     try {
+      const canSendMessage = await checkMessageLimit();
+      
+      if (!canSendMessage) {
+        upgradePopup.classList.remove('hidden');
+        return;
+      }
+
+      // Show user message
+      messageInput.value = '';
+      addMessage(message, true);
+      
+      // Send message to AI and increment count only if successful
       await sendMessageToAI(message);
+      await incrementMessageCount();
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error:', error);
       addMessage('Sorry, there was an error processing your message. Please try again.', false);
     }
   }
 });
 
-messageInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    sendButton.click();
-  }
+// Event listener for chat bubble click
+chatBubble.addEventListener('click', () => {
+  chatContainer.classList.remove('hidden');
+  messageInput.focus();
 });
 
-// Sitemap and scraping functions
-async function handleScraping(fullSite = false, specificUrls = null) {
-  try {
-    console.log('🚀 Starting scraping process:', { fullSite, hasSpecificUrls: !!specificUrls });
+// Event listener for close button click
+closeButton.addEventListener('click', () => {
+  chatContainer.classList.add('hidden');
+});
 
-    // Show scraping status
-    const scrapeBtn = document.querySelector('#scrape-btn');
-    if (scrapeBtn) {
-      scrapeBtn.disabled = true;
-      scrapeBtn.innerHTML = `
-        <svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Scraping...
-      `;
-    }
-
-    let results = [];
-    if (specificUrls) {
-      console.log('🎯 Scraping specific URLs:', specificUrls);
-      results = await scrapeSpecificUrls(specificUrls);
-    } else if (fullSite) {
-      console.log('🌐 Crawling entire site');
-      const { urlPatterns } = await chrome.storage.sync.get(['urlPatterns']);
-      const patterns = urlPatterns || ['*'];
-      results = await crawlSite(patterns);
-    } else {
-      console.log('📄 Scraping current page only');
-      const content = {
-        url: window.location.href,
-        domain: window.location.hostname,
-        content: `Title: ${document.title}\nDescription: ${document.querySelector('meta[name="description"]')?.content || ''}\n\nContent:\n${getPageContent()}`
-      };
-      results = [content];
-    }
-
-    console.log(`📊 Processing ${results.length} results`);
-
-    // Send results to backend
-    for (const result of results) {
-      console.log(`🔄 Processing result for ${result.url}`);
-      const chunks = chunkContent(result);
-      console.log(`📦 Created ${chunks.length} chunks for ${result.url}`);
-
-      for (const chunk of chunks) {
-        console.log(`📤 Sending chunk to server, size: ${chunk.content.length}`);
-        const response = await callAPI('store', { documents: [chunk] },
-          'POST'
-        );
-        if (!response.ok) {
-          console.error(`Failed to store chunk for ${result.url}`);
-          continue;
-        }
-        const responseData = await response.json();
-        console.log(`📥 Server response:`, responseData);
-      }
-    }
-
-    // Update button state
-    if (scrapeBtn) {
-      scrapeBtn.disabled = false;
-      scrapeBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 9L12 16L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Scrape Site
-      `;
-    }
-
-    // Show success message
-    addMessage('✅ Successfully scraped and stored content!', false);
-  } catch (error) {
-    console.error('❌ Scraping error:', error);
-    addMessage('❌ Error while scraping: ' + error.message, false);
-  }
-}
-
-// Handle scraping specific URLs
-async function scrapeSpecificUrls(urls) {
-  const results = [];
-
-  for (const url of urls) {
-    try {
-      console.log(`🔍 Scraping: ${url}`);
-      const response = await fetch(url);
-      const html = await response.text();
-      console.log(`📄 Got HTML content for ${url}, length: ${html.length}`);
-
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      console.log(`🔄 Parsed HTML for ${url}`);
-
-      const content = {
-        url,
-        domain: new URL(url).hostname,
-        content: `Title: ${doc.title}\nDescription: ${doc.querySelector('meta[name="description"]')?.content || ''}\n\nContent:\n${getPageContent(doc.body)}`
-      };
-
-      console.log(`📦 Created content object for ${url}:`, {
-        url: content.url,
-        domain: content.domain,
-        contentLength: content.content.length
-      });
-
-      // Store the content immediately after scraping
-      const storeResponse = await callAPI('store', { documents: [content] }, 'POST');
-      if (!storeResponse.ok) {
-        console.error(`Failed to store content for ${url}`);
-      }
-
-      results.push(content);
-
-      // Add a small delay to avoid overwhelming the server
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (error) {
-      console.error(`❌ Error scraping ${url}:`, error);
-      addMessage(`❌ Error scraping ${url}: ${error.message}`, false);
-      return
-    }
-  }
-
-  console.log(`✅ Finished scraping ${results.length} URLs`);
-  return results;
-}
-
-// Crawl site with URL pattern matching
-async function crawlSite(urlPatterns = ['*']) {
-  const baseUrl = window.location.origin;
-  const visited = new Set();
-  const queue = [window.location.href];
-  const results = [];
-
-  while (queue.length > 0 && visited.size < 100) { // Limit to 100 pages
-    const url = queue.shift();
-    if (visited.has(url)) continue;
-
-    visited.add(url);
-    console.log(`🔍 Scraping: ${url}`);
-
-    try {
-      const response = await fetch(url);
-      const html = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-
-      // Check if URL matches any pattern
-      const shouldScrape = urlPatterns.some(pattern => {
-        // Convert glob pattern to regex
-        const regex = new RegExp('^' + pattern.split('*').map(s => escapeRegExp(s)).join('.*') + '$');
-        return regex.test(url);
-      });
-
-      if (shouldScrape) {
-        // Store the page content
-        results.push({
-          url,
-          domain: new URL(url).hostname,
-          content: `Title: ${doc.title}\nDescription: ${doc.querySelector('meta[name="description"]')?.content || ''}\n\nContent:\n${getPageContent(doc.body)}`
-        });
-      }
-
-      // Find all links on the page
-      const links = Array.from(doc.querySelectorAll('a[href]'))
-        .map(a => {
-          try {
-            return new URL(a.href, baseUrl).href;
-          } catch {
-            return null;
-          }
-        })
-        .filter(href =>
-          href &&
-          href.startsWith(baseUrl) && // Only include links from same domain
-          !href.includes('#') && // Exclude anchor links
-          !visited.has(href) && // Exclude already visited
-          !href.match(/\.(jpg|jpeg|png|gif|pdf|zip|doc|docx|xls|xlsx)$/i) // Exclude non-HTML resources
-        );
-
-      // Add new links to the queue
-      queue.push(...links);
-
-      // Update progress
-      console.log(`📊 Progress: ${visited.size} pages processed, ${queue.length} in queue`);
-    } catch (error) {
-      console.error(`Error scraping ${url}:`, error);
-    }
-
-    // Add a small delay to avoid overwhelming the server
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-
-  return results;
-}
-
-// Helper function to get clean page content
-function getPageContent(element = document.body) {
-  // Create a clone to manipulate
-  const clone = element.cloneNode(true);
-
-  // Remove unwanted elements
-  const elementsToRemove = clone.querySelectorAll('script, style, noscript, iframe, svg');
-  elementsToRemove.forEach(el => el.remove());
-
-  // Get text content and clean it
-  return clone.textContent
-    .replace(/\s+/g, ' ')
-    .replace(/\n+/g, '\n')
-    .trim();
-}
-
-// Get current domain
-function getCurrentDomain() {
-  return window.location.hostname;
-}
-
-// Store scraped content in vector database
-async function storeScrapedContent(pages) {
-  try {
-    const domain = getCurrentDomain();
-    const documents = pages.map(page => ({
-      url: page.url,
-      content: page.content,
-      domain: domain,
-      metadata: {
-        title: page.title
-      }
-    }));
-
-    const response = await callAPI('store', { documents }, "POST");
-
-    if (!response.ok) {
-      throw new Error('Failed to store content');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error storing content:', error);
-    throw error;
-  }
-}
-
-// Example of searching stored content
-async function searchContent(query) {
-  try {
-    const results = await callAPI('search', { query }, "POST");
-    console.log('🔍 Search results:', results);
-    return results;
-  } catch (error) {
-    console.error('Search failed:', error);
-    throw error;
-  }
-}
-
+// Event listener for scrape button click
 scrapeButton.addEventListener('click', async () => {
   const button = scrapeButton;
   button.textContent = 'Scraping...';
@@ -910,103 +719,26 @@ scrapeButton.addEventListener('click', async () => {
   }
 });
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  if (request.action === 'updatePosition') {
-    updateBubblePosition(request.position);
-    sendResponse({ success: true });
-  } else if (request.action === 'scrapePage') {
-    handleScraping(false);
-    sendResponse({ success: true });
-  } else if (request.action === 'scrapeSite') {
-    handleScraping(true);
-    sendResponse({ success: true });
-  } else if (request.action === 'scrapePatterns') {
-    handleScraping(false, request.urls);
-    sendResponse({ success: true });
-  }
-  return true;
-});
+// Function to load chat history
+async function loadChatHistory() {
+  try {
+    const response = await callAPI('/api/chat-history', {}, 'GET');
+    const messages = response.messages;
 
-// Load saved position
-chrome.storage.sync.get(['chatPosition'], function(result) {
-  if (result.chatPosition) {
-    updateBubblePosition(result.chatPosition);
-  }
-});
+    // Clear existing messages
+    document.getElementById('chat-messages').innerHTML = '';
 
-// Listen for position update messages
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  if (request.action === 'updatePosition') {
-    updateBubblePosition(request.position);
-  }
-});
-
-function updateBubblePosition(position) {
-  const bubble = document.querySelector('.chat-bubble');
-  if (bubble) {
-    // Remove all position classes
-    bubble.classList.remove(
-      'top-left', 'top-center', 'top-right',
-      'middle-left', 'middle-center', 'middle-right',
-      'bottom-left', 'bottom-center', 'bottom-right'
-    );
-    // Add new position class
-    bubble.classList.add(position);
-  }
-}
-
-// Helper function to escape special characters in regex
-function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Function to chunk content into smaller pieces
-function chunkContent(pageData) {
-  const maxChunkSize = 8000; // Maximum size of each chunk
-  const content = pageData.content;
-  const chunks = [];
-
-  // Split content into paragraphs
-  const paragraphs = content.split('\n').filter(p => p.trim());
-  let currentChunk = [];
-  let currentSize = 0;
-
-  for (const paragraph of paragraphs) {
-    if (currentSize + paragraph.length > maxChunkSize && currentChunk.length > 0) {
-      // Create a new chunk from accumulated paragraphs
-      chunks.push({
-        url: pageData.url,
-        domain: pageData.domain,
-        content: currentChunk.join('\n')
-      });
-      currentChunk = [];
-      currentSize = 0;
-    }
-
-    currentChunk.push(paragraph);
-    currentSize += paragraph.length;
-  }
-
-  // Add the last chunk if there's anything left
-  if (currentChunk.length > 0) {
-    chunks.push({
-      url: pageData.url,
-      domain: pageData.domain,
-      content: currentChunk.join('\n')
+    // Add each message from history
+    messages.forEach(msg => {
+      addMessage(msg.content, msg.role === 'user');
     });
-  }
 
-  return chunks;
+    // Scroll to bottom
+    document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+  } catch (error) {
+    console.error('Error loading chat history:', error);
+  }
 }
 
-// Toggle chat container visibility
-chatBubble.addEventListener('click', () => {
-  chatContainer.classList.remove('hidden');
-  messageInput.focus();
-  loadChatHistory(); // Load chat history when opening chat
-});
-
-closeBtn.addEventListener('click', () => {
-  chatContainer.classList.add('hidden');
-});
+// Load chat history
+loadChatHistory();

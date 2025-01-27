@@ -274,69 +274,133 @@
     .scrape-patterns-btn:hover svg {
       transform: translateY(2px);
     }
+
+    #auth-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      text-align: center;
+    }
+
+    #app-container {
+      display: none;
+    }
+
+    #auth-container.hidden {
+      display: none;
+    }
+
+    #app-container.visible {
+      display: block;
+    }
+
+    .auth-btn {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .auth-btn:hover {
+      background: #1d4ed8;
+    }
+
+    .sign-out-btn {
+      background: #ef4444;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      margin-top: 8px;
+    }
+
+    .sign-out-btn:hover {
+      background: #dc2626;
+    }
+
+    .error-message {
+      color: #ef4444;
+      font-size: 0.875rem;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>Chat Assistant</h1>
-      <p class="description">
-        Your AI-powered chat assistant that understands the content of any website you visit.
-        Simply click the chat bubble to start asking questions about the current page.
-      </p>
-    </div>
+  <div id="auth-container">
+    <h1>Welcome to Chat Assistant</h1>
+    <p class="description">Please sign in to continue</p>
+    <div id="auth-error" class="error-message"></div>
+    <button id="signin-btn" class="auth-btn">Sign in with Clerk</button>
+  </div>
 
-    <div class="section">
-      <h2 class="section-title">Chat position</h2>
-      <div class="position-controls">
-        <button class="position-btn" data-position="top-left" title="Top Left"></button>
-        <button class="position-btn" data-position="top-center" title="Top Center"></button>
-        <button class="position-btn" data-position="top-right" title="Top Right"></button>
-        <button class="position-btn" data-position="middle-left" title="Middle Left"></button>
-        <button class="position-btn" data-position="middle-center" title="Middle Center"></button>
-        <button class="position-btn" data-position="middle-right" title="Middle Right"></button>
-        <button class="position-btn active" data-position="bottom-left" title="Bottom Left"></button>
-        <button class="position-btn" data-position="bottom-center" title="Bottom Center"></button>
-        <button class="position-btn" data-position="bottom-right" title="Bottom Right"></button>
+  <div id="app-container">
+    <div class="container">
+      <div class="header">
+        <h1>Chat Assistant</h1>
+        <p class="description">Configure your chat assistant settings below.</p>
+        <button id="sign-out-btn" class="sign-out-btn">Sign Out</button>
       </div>
-      <div class="status" id="position-status"></div>
-    </div>
 
-    <div class="section">
-      <h2 class="section-title">Scraping Options</h2>
-      <div class="scrape-controls">
-        <button id="scrape-page" class="action-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 12L11 14L15 10M12 3L4 7V17L12 21L20 17V7L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Scrape Current Page
-        </button>
-        <button id="scrape-site" class="action-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 3L4 7V17L12 21L20 17V7L12 3Z M12 12L20 8M12 12L4 8M12 12V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Scrape Entire Site
-        </button>
+      <div class="section">
+        <h2 class="section-title">Chat position</h2>
+        <div class="position-controls">
+          <button class="position-btn" data-position="top-left" title="Top Left"></button>
+          <button class="position-btn" data-position="top-center" title="Top Center"></button>
+          <button class="position-btn" data-position="top-right" title="Top Right"></button>
+          <button class="position-btn" data-position="middle-left" title="Middle Left"></button>
+          <button class="position-btn" data-position="middle-center" title="Middle Center"></button>
+          <button class="position-btn" data-position="middle-right" title="Middle Right"></button>
+          <button class="position-btn active" data-position="bottom-left" title="Bottom Left"></button>
+          <button class="position-btn" data-position="bottom-center" title="Bottom Center"></button>
+          <button class="position-btn" data-position="bottom-right" title="Bottom Right"></button>
+        </div>
+        <div class="status" id="position-status"></div>
       </div>
-      <div class="status" id="scrape-status"></div>
-    </div>
 
-    <div class="section">
-      <h2 class="section-title">URL Patterns</h2>
-      <div class="url-patterns">
-        <div class="pattern-input">
-          <input type="text" id="pattern-input" placeholder="Enter URL pattern (e.g., */docs/*)">
-          <button id="add-pattern">Add</button>
+      <div class="section">
+        <h2 class="section-title">Scraping Options</h2>
+        <div class="scrape-controls">
+          <button id="scrape-page" class="action-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 12L11 14L15 10M12 3L4 7V17L12 21L20 17V7L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Scrape Current Page
+          </button>
+          <button id="scrape-site" class="action-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3L4 7V17L12 21L20 17V7L12 3Z M12 12L20 8M12 12L4 8M12 12V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Scrape Entire Site
+          </button>
         </div>
-        <div id="pattern-list" class="pattern-list">
-          <!-- Patterns will be added here dynamically -->
+        <div class="status" id="scrape-status"></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">URL Patterns</h2>
+        <div class="url-patterns">
+          <div class="pattern-input">
+            <input type="text" id="pattern-input" placeholder="Enter URL pattern (e.g., */docs/*)">
+            <button id="add-pattern">Add</button>
+          </div>
+          <div id="pattern-list" class="pattern-list">
+            <!-- Patterns will be added here dynamically -->
+          </div>
+          <button id="scrape-patterns" class="scrape-patterns-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 9L12 16L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Scrape Selected URLs
+          </button>
         </div>
-        <button id="scrape-patterns" class="scrape-patterns-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19 9L12 16L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Scrape Selected URLs
-        </button>
       </div>
     </div>
   </div>
